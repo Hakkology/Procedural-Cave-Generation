@@ -19,6 +19,12 @@ public class MapGenerator : MonoBehaviour
         GenerateMap();
     }
 
+    private void Update() {
+        if (Input.GetMouseButton(0)) {
+            GenerateMap();
+        }
+    }
+
     //map generation method
     void GenerateMap() {
         map = new int[width, height];
@@ -27,6 +33,8 @@ public class MapGenerator : MonoBehaviour
         for (int i = 0; i < smoothingIteration; i++) {
             SmoothingMapEdges();
         }
+
+        ProcessMap();
 
         int borderSize = 10;
         int[,] borderedMap = new int[width + borderSize * 2, height + borderSize * 2];
@@ -44,6 +52,81 @@ public class MapGenerator : MonoBehaviour
 
         MeshGenerator meshGen = GetComponent<MeshGenerator>();
         meshGen.GenerateMesh(borderedMap, 1);
+    }
+
+    void ProcessMap() {
+        List<List<Coordinates>> wallRegions = GetRegions(1);
+        int wallThresholdSize = 50;
+
+        foreach (List<Coordinates> wallRegion in wallRegions) {
+            if (wallRegion.Count < wallThresholdSize) {
+                foreach (Coordinates tile in wallRegion) {
+                    map[tile.tileX, tile.tileY] = 0;
+                }
+            }
+        }
+
+        List<List<Coordinates>> roomRegions = GetRegions(0);
+        int roomThresholdSize = 50;
+
+        foreach (List<Coordinates> roomRegion in roomRegions) {
+            if (roomRegion.Count < roomThresholdSize) {
+                foreach (Coordinates tile in roomRegion) {
+                    map[tile.tileX, tile.tileY] = 1;
+                }
+            }
+        }
+    }
+
+    List<List<Coordinates>> GetRegions(int tileType) {
+        List<List<Coordinates>> regions = new List<List<Coordinates>>();
+        int[,] mapFlags = new int[width, height];
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                if (mapFlags[x,y] == 0 && map[x,y] == tileType) {
+                    List<Coordinates> newRegion = GetRegionTiles(x, y);
+                    regions.Add(newRegion);
+
+                    foreach (Coordinates tile in newRegion) {
+                        mapFlags[tile.tileX, tile.tileY] = 1;
+                    }
+                }
+            }
+        }
+
+        return regions;
+    }
+
+    List<Coordinates> GetRegionTiles(int startX, int startY) {
+        List<Coordinates> tiles = new List<Coordinates>();
+        int[,] mapFlags = new int[width, height];
+        int tileType = map[startX,startY];
+
+        Queue<Coordinates> queue = new Queue<Coordinates>();
+        queue.Enqueue(new Coordinates(startX, startY));
+        mapFlags [startX,startY] = 1;
+
+        while (queue.Count > 0) {
+            Coordinates tile = queue.Dequeue();
+            tiles.Add(tile);
+
+            for (int x = tile.tileX -1; x <= tile.tileX; x++) {
+                for (int y = tile.tileY - 1; y <= tile.tileY; y++) {
+                    if (IsInMapRange (x,y) && (y == tile.tileY || x == tile.tileX)) {
+                        if (mapFlags[x,y] == 0 && map[x,y] == tileType) {
+                            mapFlags[x, y] = 1;
+                            queue.Enqueue(new Coordinates(x, y));
+                        }
+                    }
+                }
+            }
+        }
+        return tiles;
+    }
+
+    bool IsInMapRange(int x, int y) {
+        return x >= 0 && x < width && y >= 0 && y < height;
     }
 
     //random fill map generation method
@@ -88,7 +171,7 @@ public class MapGenerator : MonoBehaviour
         int wallCount = 0;
         for (int neighbourX = gridX -1; neighbourX <= gridX + 1; neighbourX++) {
             for (int neighbourY = gridY - 1; neighbourY <= gridY + 1; neighbourY++) {
-                if (neighbourX >=0 && neighbourX < width && neighbourY >=0 && neighbourY < height) {
+                if (IsInMapRange (neighbourX, neighbourY)) {
                     if (neighbourX != gridX || neighbourY != gridY) {
                         wallCount += map[neighbourX, neighbourY];
                     }
@@ -99,6 +182,16 @@ public class MapGenerator : MonoBehaviour
             }
         }
         return wallCount;
+    }
+
+    struct Coordinates {
+        public int tileX;
+        public int tileY;
+
+        public Coordinates(int x, int y) {
+            tileX = x;
+            tileY = y;
+        }
     }
 
     //private void OnDrawGizmos() {
